@@ -6,7 +6,7 @@ import webbrowser
 import asyncio
 import customtkinter as ctk
 import requests
-from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink
+from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink, ensure_csv_files_exist
 from globalVariables import fileSongsListened, fileSongsNotListened, headerFile, columnWidths, maxArtistLength, \
     maxSongLength, ICON_SIZE, PAGE_SIZE_SONG, headerGUI, NO_SONGS_LAST, fileChartCount, rankList, \
     MAX_SONG_COMPONENT_SIZE, SONG_TABLE_OFFSET_ROW, SONG_TABLE_OFFSET_COLUMN, CHART_TABLE_OFFSET_COLUMN, \
@@ -37,6 +37,9 @@ class App(ctk.CTk):
         self.chartLengths = {}
         self.showListenedSongs = False
 
+        # Ensure CSV files exist before loading data
+        ensure_csv_files_exist()
+        
         self.countries = getChartLinksFromFile()
         self.chartProperties = getChartProperties()
         self.songsNotListened = getSongsNotListened(self)
@@ -197,6 +200,7 @@ def openYoutubeLink(app, pSongID, songsToPlay=1):
 
         songList = list(range(pSongID, min(pSongID + songsToPlay, len(app.songsNotListened))))
 
+        ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
             for songID in songList:
                 webbrowser.open(app.songsNotListened[songID]['urlYoutube'])
@@ -366,6 +370,7 @@ def getLastSongsListenedTo(app):
 
 def getSongsListened():
     songsListened = []
+    ensure_csv_files_exist()
     with open(fileSongsListened, 'r') as fileListened:
         headers = fileListened.readline().strip().split(';')
         songsListenedFile = fileListened.readlines()
@@ -385,25 +390,6 @@ def switchSongs(app):
         app.populateSongs()
 
     return callback()
-
-
-def findDuplicates(app):
-    seen = []
-    duplicates = []
-    for songToCheck in app.songsNotListened + app.songsListened:
-        isDuplicate = False
-        for songTuple in seen:
-            if songTuple['artist'].lower() == songToCheck['artist'].lower() and songTuple['songName'].lower() == \
-                    songToCheck['songName'].lower():
-                duplicates.append(songToCheck)
-                isDuplicate = True
-        if not isDuplicate:
-            seen.append(songToCheck)
-    if len(duplicates) == 0:
-        print("No duplicates")
-    else:
-        for song in duplicates:
-            print(f"{song['artist']} - {song['songName']}")
 
 
 def findDuplicates(app):
@@ -505,6 +491,7 @@ def getShazamTopSongsWrapper(app, maxRank):
     for track in shazamTracks:
         writeMaterial += addToWriteStringIfSongDoesNotExist(app, track['artist'], track['songName'], track['rank'],
                                                             track['chart'], track['urlYoutube'])
+    ensure_csv_files_exist()
     with open(fileSongsNotListened, 'a') as fileNotListened:
         fileNotListened.write(writeMaterial)
 
@@ -538,6 +525,7 @@ def updateSongDatabase(self, rank, chart, maxRank, stringToAddToNotListened, son
         if PRINT_CHART_STATISTICS:
             with open(fileChartCount, 'a') as f:
                 f.write(chart + ";" + str(rank) + ";\n")
+    ensure_csv_files_exist()
     with open(fileSongsNotListened, 'a') as fileNotListened:
         fileNotListened.write(stringToAddToNotListened)
 

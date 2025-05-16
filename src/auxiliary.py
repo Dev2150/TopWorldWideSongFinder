@@ -1,14 +1,15 @@
 import random
 import re
+import os
 from datetime import date
 
 import requests
 from bs4 import BeautifulSoup
 import time
 
-from globalVariables import fileNameChartLinks, fileSongsNotListened, urlSongCharts, \
+from globalVariables import fileNameChartLinks, fileSongsNotListened, fileSongsListened, urlSongCharts, \
     fileChartProperties, SCORE_NUMERATOR, SCORE_DENOMINATOR, SCORE_RATING_INERTIA, MIN_SLEEP_BETWEEN_CHARTS, \
-    MAX_SLEEP_BETWEEN_CHARTS
+    MAX_SLEEP_BETWEEN_CHARTS, headerFile
 
 
 def removeURLImpurities(link: str):
@@ -101,8 +102,20 @@ def getScore(song, app) -> int:
         raise Exception(song['chart'] + " is not in chartProperties")
 
 
+def ensure_csv_files_exist():
+    """
+    Ensures that the songsNotListened.csv and songsListened.csv files exist.
+    If they don't exist, creates them with the appropriate header.
+    """
+    for file_path in [fileSongsNotListened, fileSongsListened]:
+        if not os.path.exists(file_path):
+            with open(file_path, 'w') as f:
+                f.write(headerFile + "\n")
+
+
 def getSongsNotListened(app):
     songsNotListened = []
+    ensure_csv_files_exist()
     with open(fileSongsNotListened, 'r') as fileNotListened:
         headers = fileNotListened.readline().strip().split(';')
         songsNotListenedFile = fileNotListened.readlines()
