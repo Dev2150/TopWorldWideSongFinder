@@ -154,15 +154,3 @@ def generateYoutubeLink(songName, artist):
     artistURL = re.sub(r' ', '+', artist)
     youtubeLink = 'https://music.youtube.com/search?q=' + artistURL + "+" + songNameURL
     return removeURLImpurities(youtubeLink)
-
-
-def test(app):
-    if shazamTrack['songName'].lower() != songName.lower() and shazamTrack['artist'].lower() != artist.lower():
-        shazamTracks.append({
-            'songName': songName,
-            'artist': artist,
-            'chart': countryCode + "-shazam",
-            'rank': rank + 1,
-            'date': date.today(),
-            'urlYoutube': generateYoutubeLink(songName, artist)
-        })
