@@ -4,6 +4,8 @@ import os
 import re
 import webbrowser
 import asyncio
+import threading
+import queue
 import customtkinter as ctk
 import requests
 from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink, ensure_csv_files_exist, get_cached_image
@@ -37,6 +39,14 @@ class App(ctk.CTk):
         self.chartLengths = {}
         self.showListenedSongs = False
         self.songsToPlay = 10  # Default number of songs to play
+        
+        # Progress indicators
+        self.progressFrame = None
+        self.progressLabel = None
+        self.progressBar = None
+        self.isLoading = False
+        self.fetchingInterrupted = False
+        self.stopButton = None
 
         # Ensure CSV files exist before loading data
         ensure_csv_files_exist()
@@ -252,26 +262,160 @@ class App(ctk.CTk):
         btnGenerate.pack(padx=10, pady=5)
         self.widgetsChart.append(btnGenerate)
 
+    def show_progress_indicator(self, message="Loading..."):
+        # If there's already a progress indicator, destroy it first
+        if self.progressFrame is not None:
+            self.hide_progress_indicator()
+        
+        # Create a new progress frame
+        self.progressFrame = ctk.CTkFrame(self)
+        self.progressFrame.place(relx=0.5, rely=0.5, anchor="center")
+        
+        self.progressLabel = ctk.CTkLabel(self.progressFrame, text=message, font=("Arial", 14))
+        self.progressLabel.pack(pady=(10, 5))
+        
+        self.progressBar = ctk.CTkProgressBar(self.progressFrame, width=300, mode="indeterminate")
+        self.progressBar.pack(padx=20, pady=(0, 10))
+        
+        # Add a stop button
+        self.stopButton = ctk.CTkButton(
+            self.progressFrame, 
+            text="Stop & Save", 
+            font=("Arial", 12),
+            fg_color="#ff5555",
+            command=self.interrupt_fetching
+        )
+        self.stopButton.pack(pady=(0, 10))
+        
+        self.progressBar.start()
+        self.progressFrame.lift()
+        self.isLoading = True
+        self.fetchingInterrupted = False
+        self.update()
+    
+    def hide_progress_indicator(self):
+        if self.progressFrame is not None:
+            self.progressBar.stop()
+            self.progressFrame.destroy()  # Destroy instead of hiding
+            self.progressFrame = None
+            self.progressLabel = None
+            self.progressBar = None
+            self.stopButton = None
+            self.isLoading = False
+            self.update()
+    
+    def update_progress_message(self, message):
+        if self.progressLabel is not None:
+            self.progressLabel.configure(text=message)
+            self.update()
+    
+    def refresh_song_data(self):
+        """Reload all song data and refresh the UI"""
+        # Reload songs from files
+        self.songsNotListened = getSongsNotListened(self)
+        self.songsListened = getSongsListened()
+        
+        # Sort songs using current criterion (assumes 'score' is default)
+        sortSongsBy(self, 'score')
+        
+        # Add a small delay to ensure all data is ready
+        self.after(100, self._complete_refresh)
+    
+    def _complete_refresh(self):
+        """Complete the UI refresh after data is loaded"""
+        # Refresh the UI
+        self.populateSongs()
+        self.update()
+        print("UI refreshed with new songs")
+
     def generateSongsFromSelection(self, songCountDropdown, chartCombobox):
+        # Prevent starting new fetching if already in progress
+        if self.isLoading:
+            print("Song fetching already in progress")
+            return
+            
         max_rank = int(songCountDropdown.get())
         selected_chart = chartCombobox.get()
         
-        if selected_chart == "All Charts":
-            # Use the original function to get songs from all charts
-            getSongsFromWWW(self, max_rank)
-        else:
-            # Get songs from only the selected chart
-            if PRINT_CHART_STATISTICS:
-                open(fileChartCount, 'w').close()  # erase count of charts' length
+        # Show loading indicator
+        self.show_progress_indicator("Fetching songs...")
+        
+        # Run the song fetching in a separate thread
+        worker_thread = threading.Thread(
+            target=self._fetch_songs_thread,
+            args=(selected_chart, max_rank)
+        )
+        worker_thread.daemon = True
+        worker_thread.start()
+    
+    def _fetch_songs_thread(self, selected_chart, max_rank):
+        try:
+            if selected_chart == "All Charts":
+                # Use the original function to get songs from all charts
+                if PRINT_CHART_STATISTICS:
+                    open(fileChartCount, 'w').close()  # erase count of charts' length
+                
+                # Update UI using a function to avoid lambda capture issues
+                def update_ui(message):
+                    self.after(0, lambda: self.update_progress_message(message))
+                
+                # Check if we should interrupt after each step
+                def should_stop():
+                    return self.fetchingInterrupted
+                
+                update_ui("Getting Shazam songs...")
+                if not should_stop():
+                    getShazamTopSongsWrapper(self, max_rank)
+                
+                # Get billboard songs
+                total_charts = len(self.countries)
+                for i, chart in enumerate(self.countries):
+                    if should_stop():
+                        update_ui("Interrupted! Saving found songs...")
+                        break
+                        
+                    progress_msg = f"Getting songs from {chart} ({i+1}/{total_charts})"
+                    update_ui(progress_msg)
+                    getSongsFromBillboard(self, chart, max_rank)
+            else:
+                # Get songs from only the selected chart
+                if PRINT_CHART_STATISTICS:
+                    open(fileChartCount, 'w').close()  # erase count of charts' length
+                
+                # Update UI using a function to avoid lambda capture issues
+                def update_ui(message):
+                    self.after(0, lambda: self.update_progress_message(message))
+                
+                # Check if we should interrupt after each step
+                def should_stop():
+                    return self.fetchingInterrupted
+                
+                update_ui("Getting Shazam songs...")
+                if not should_stop():
+                    getShazamTopSongsWrapper(self, max_rank)
+                
+                # Get selected chart
+                if not should_stop():
+                    update_ui(f"Getting songs from {selected_chart}...")
+                    getSongsFromBillboard(self, selected_chart, max_rank)
             
-            # Still get Shazam songs for variety
-            getShazamTopSongsWrapper(self, max_rank)
-            print(f"Getting songs from chart: {selected_chart}")
-            
-            # Only process the selected chart
-            getSongsFromBillboard(self, selected_chart, max_rank)
-            
-            self.populateSongs()
+            # Final update with success message
+            if self.fetchingInterrupted:
+                self.after(0, lambda: self.update_progress_message("Fetching stopped. Saving found songs..."))
+            else:
+                self.after(0, lambda: self.update_progress_message("Finished! Refreshing song list..."))
+        
+        finally:
+            # Update UI in the main thread when done
+            self.after(0, self.hide_progress_indicator)
+            self.after(0, self.refresh_song_data)
+
+    def interrupt_fetching(self):
+        """Interrupt the current fetching process but save what was found"""
+        self.fetchingInterrupted = True
+        self.stopButton.configure(text="Stopping...", state="disabled")
+        self.update_progress_message("Stopping and saving data...")
+        self.update()
 
 
 def openYoutubeLink(app, pSongID, songsToPlay=None):
@@ -311,18 +455,58 @@ def openYoutubeLink(app, pSongID, songsToPlay=None):
 
 
 def getSongsFromWWW(self, maxRank):
-    def callback():
+    # Prevent starting new fetching if already in progress
+    if self.isLoading:
+        print("Song fetching already in progress")
+        return
+        
+    # Show loading indicator if it's a direct call
+    self.show_progress_indicator("Fetching songs...")
+    
+    # Run in a thread
+    worker_thread = threading.Thread(
+        target=_getSongsFromWWW_thread,
+        args=(self, maxRank)
+    )
+    worker_thread.daemon = True
+    worker_thread.start()
+
+def _getSongsFromWWW_thread(self, maxRank):
+    try:
         if PRINT_CHART_STATISTICS:
             open(fileChartCount, 'w').close()  # erase count of charts' length
-        getShazamTopSongsWrapper(self, maxRank)
-        print("Got shazam songs")
-        for nextChart in self.countries:
-            getSongsFromBillboard(self, nextChart, maxRank)
-        # getLastFMCharts(self, maxRank)
-
-    callback()
-    # self.songsNotListened = getSongsNotListened(self)  # now it's performed inside getSongsFromBillboard
-    self.populateSongs()
+        
+        # Update UI using a function to avoid lambda capture issues
+        def update_ui(message):
+            self.after(0, lambda: self.update_progress_message(message))
+        
+        # Check if we should interrupt after each step
+        def should_stop():
+            return self.fetchingInterrupted
+        
+        update_ui("Getting Shazam songs...")
+        if not should_stop():
+            getShazamTopSongsWrapper(self, maxRank)
+        
+        total_charts = len(self.countries)
+        for i, chart in enumerate(self.countries):
+            if should_stop():
+                update_ui("Interrupted! Saving found songs...")
+                break
+                
+            progress_msg = f"Getting songs from {chart} ({i+1}/{total_charts})"
+            update_ui(progress_msg)
+            getSongsFromBillboard(self, chart, maxRank)
+        
+        # Final update with success message
+        if self.fetchingInterrupted:
+            self.after(0, lambda: self.update_progress_message("Fetching stopped. Saving found songs..."))
+        else:
+            self.after(0, lambda: self.update_progress_message("Finished! Refreshing song list..."))
+    finally:
+        # Update UI in the main thread when done
+        self.after(0, self.hide_progress_indicator)
+        self.after(0, self.refresh_song_data)
 
 
 def getMaxRankBasedOnRating(initialRank, rating):
@@ -607,8 +791,6 @@ def updateSongDatabase(self, rank, chart, maxRank, stringToAddToNotListened, son
     ensure_csv_files_exist()
     with open(fileSongsNotListened, 'a') as fileNotListened:
         fileNotListened.write(stringToAddToNotListened)
-
-    self.songsNotListened = getSongsNotListened(self)
 
 
 def getLastFMCharts(self, maxRank):
