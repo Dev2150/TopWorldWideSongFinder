@@ -1,0 +1,6 @@
+songsNotListened.csv
+songsListened.csv
+dist/*
+build/*
+__pycache__
+.idea

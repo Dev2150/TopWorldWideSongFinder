@@ -6,13 +6,13 @@ import requests
 from bs4 import BeautifulSoup
 import time
 
-from src.globalVariables import fileNameChartLinks, fileSongsNotListened, urlSongCharts, \
+from globalVariables import fileNameChartLinks, fileSongsNotListened, urlSongCharts, \
     fileChartProperties, SCORE_NUMERATOR, SCORE_DENOMINATOR, SCORE_RATING_INERTIA, MIN_SLEEP_BETWEEN_CHARTS, \
     MAX_SLEEP_BETWEEN_CHARTS
 
 
 def removeURLImpurities(link: str):
-    link = re.sub(r'&', ' ', link)
+    link = re.sub(r'&', '', link)
     link = re.sub(r'#', '', link)
     return link
 
@@ -92,7 +92,9 @@ def getScore(song, app) -> int:
         chart = app.chartProperties[song['chart']]
         if 'rating' in chart:
             rating = app.chartProperties[song['chart']]['rating']
-            return int(SCORE_NUMERATOR / (SCORE_DENOMINATOR + int(song['rank'])) * (SCORE_RATING_INERTIA + float(rating)))
+            score = int(SCORE_NUMERATOR / (SCORE_DENOMINATOR + int(song['rank']))
+                       * (SCORE_RATING_INERTIA + float(rating)))
+            return score
         else:
             raise Exception(chart + " does not have a rating")
     else:
@@ -122,7 +124,7 @@ def getChartProperties():
             properties = chartProps.strip().split(';')
             if properties[1] == "":
                 properties[1] = 0
-            chartProperties[properties[0]] = {'rating': properties[1]}
+            chartProperties[properties[0]] = {'rating': properties[1], 'maxRank': properties[2]}
 
     return chartProperties
 
@@ -132,3 +134,22 @@ def sortBillBoardChartLinksByChartRepresented(countries):
     with open("billboardChartLinks2.csv", "w+") as g:
         for chartURL, chart in sortedCountries.items():
             g.write(chart + ";" + chartURL + "\n")
+
+
+def generateYoutubeLink(songName, artist):
+    songNameURL = re.sub(r' ', '+', songName)
+    artistURL = re.sub(r' ', '+', artist)
+    youtubeLink = 'https://www.youtube.com/results?search_query=' + artistURL + "+" + songNameURL + "+lyrics"
+    return removeURLImpurities(youtubeLink)
+
+
+def test(app):
+    if shazamTrack['songName'].lower() != songName.lower() and shazamTrack['artist'].lower() != artist.lower():
+        shazamTracks.append({
+            'songName': songName,
+            'artist': artist,
+            'chart': countryCode + "-shazam",
+            'rank': rank + 1,
+            'date': date.today(),
+            'urlYoutube': generateYoutubeLink(songName, artist)
+        })

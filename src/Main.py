@@ -3,6 +3,9 @@ from DialogApp import App
 if __name__ == '__main__':
     # logger = setupLogging()
 
+    import warnings
+    warnings.filterwarnings("ignore")
+
     app = App()
     app.mainloop()
 
