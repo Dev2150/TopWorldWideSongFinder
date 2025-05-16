@@ -582,8 +582,15 @@ def printStatistics(app):
             dates[song['date']] = 0
         else:
             dates[song['date']] += 1
-    for date, count in enumerate(dates.items()):
-        print(f"{str(date)} - {str(count)}")
+    
+    # Create a CSV file for statistics
+    stats_file = "statistics.csv"
+    with open(stats_file, 'w') as f:
+        f.write("Date,Count\n")
+        for date, count in dates.items():
+            f.write(f"{date},{count}\n")
+    
+    print(f"Statistics written to {stats_file}")
 
 
 def updateSongDatabase(self, rank, chart, maxRank, stringToAddToNotListened, songsFound):
