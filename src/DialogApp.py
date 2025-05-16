@@ -178,21 +178,76 @@ class App(ctk.CTk):
         self.widgetsSongs.append(btnSortByScore)
 
     def populateCharts(self):
-
         rowOffset = CHART_TABLE_OFFSET_ROW
         columnOffset = CHART_TABLE_OFFSET_COLUMN
         for widget in self.widgetsChart:
             widget.destroy()
         self.widgetsChart.clear()
+        
+        # Define consistent sizes
+        label_width = 120
+        dropdown_width = 150
+        button_width = 250
+        element_height = 32
+        
+        # First row - Number of songs label and dropdown
+        lblSongCount = ctk.CTkLabel(master=self, text="Number of songs:", font=("Arial", 14), width=label_width, anchor="e")
+        lblSongCount.grid(row=rowOffset, column=columnOffset, padx=(5, 10), pady=5, sticky="e")
+        self.widgetsChart.append(lblSongCount)
+        
+        song_count_values = [str(rank) for rank in rankList]
+        songCountDropdown = ctk.CTkComboBox(self, values=song_count_values, width=dropdown_width, height=element_height, font=("Arial", 14))
+        songCountDropdown.set(str(rankList[0]))  # Set default value to first option
+        songCountDropdown.grid(row=rowOffset, column=columnOffset + 1, padx=5, pady=5, sticky="w")
+        self.widgetsChart.append(songCountDropdown)
+        
+        # Second row - Chart selection label and dropdown
+        chart_label = ctk.CTkLabel(master=self, text="Select chart:", font=("Arial", 14), width=label_width, anchor="e")
+        chart_label.grid(row=rowOffset + 1, column=columnOffset, padx=(5, 10), pady=5, sticky="e")
+        self.widgetsChart.append(chart_label)
+        
+        chartCombobox = ctk.CTkComboBox(self, values=["All Charts"] + list(self.countries), width=dropdown_width, height=element_height, font=("Arial", 14))
+        chartCombobox.set("All Charts")  # Default to all charts
+        chartCombobox.grid(row=rowOffset + 1, column=columnOffset + 1, padx=5, pady=5, sticky="w")
+        self.widgetsChart.append(chartCombobox)
+        
+        # Third row - Generate button
+        btnFrame = ctk.CTkFrame(master=self, fg_color="transparent")
+        btnFrame.grid(row=rowOffset + 2, column=columnOffset, columnspan=2, padx=5, pady=10)
+        self.widgetsChart.append(btnFrame)
+        
+        btnGenerate = ctk.CTkButton(
+            master=btnFrame, 
+            text='Generate Songs', 
+            fg_color='#6b03fc',
+            font=("Arial", 14, "bold"),
+            width=button_width,
+            height=element_height + 8,
+            command=lambda: self.generateSongsFromSelection(songCountDropdown, chartCombobox)
+        )
+        btnGenerate.pack(padx=10, pady=5)
+        self.widgetsChart.append(btnGenerate)
 
-        for rankID, maxRank in enumerate(rankList):
-            btnTop = ctk.CTkButton(master=self, text='Top ' + str(maxRank), fg_color='purple',
-                                   command=functools.partial(getSongsFromWWW, self, maxRank))
-            btnTop.grid(row=rowOffset + rankID, column=columnOffset)
-
-        combobox = ctk.CTkComboBox(self, values=list(self.countries))  # command=combobox_callback)
-        combobox.grid(row=rowOffset, column=columnOffset + 1)
-        self.widgetsChart.append(combobox)
+    def generateSongsFromSelection(self, songCountDropdown, chartCombobox):
+        max_rank = int(songCountDropdown.get())
+        selected_chart = chartCombobox.get()
+        
+        if selected_chart == "All Charts":
+            # Use the original function to get songs from all charts
+            getSongsFromWWW(self, max_rank)
+        else:
+            # Get songs from only the selected chart
+            if PRINT_CHART_STATISTICS:
+                open(fileChartCount, 'w').close()  # erase count of charts' length
+            
+            # Still get Shazam songs for variety
+            getShazamTopSongsWrapper(self, max_rank)
+            print(f"Getting songs from chart: {selected_chart}")
+            
+            # Only process the selected chart
+            getSongsFromBillboard(self, selected_chart, max_rank)
+            
+            self.populateSongs()
 
 
 def openYoutubeLink(app, pSongID, songsToPlay=1):
