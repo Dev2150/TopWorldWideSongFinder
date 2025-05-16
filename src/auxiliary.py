@@ -152,7 +152,7 @@ def sortBillBoardChartLinksByChartRepresented(countries):
 def generateYoutubeLink(songName, artist):
     songNameURL = re.sub(r' ', '+', songName)
     artistURL = re.sub(r' ', '+', artist)
-    youtubeLink = 'https://www.youtube.com/results?search_query=' + artistURL + "+" + songNameURL + "+lyrics"
+    youtubeLink = 'https://music.youtube.com/search?q=' + artistURL + "+" + songNameURL
     return removeURLImpurities(youtubeLink)
 
 
