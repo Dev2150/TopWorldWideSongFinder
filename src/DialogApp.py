@@ -597,7 +597,13 @@ def sortSongsBy(app, criterion):
         isSortReversed = False
         if criterion == 'score':
             isSortReversed = True
-        app.songsNotListened.sort(key=lambda x: x[criterion], reverse=isSortReversed)
+            
+        if criterion == 'rank':
+            # Convert rank to integer for proper numerical sorting
+            app.songsNotListened.sort(key=lambda x: int(x[criterion]), reverse=isSortReversed)
+        else:
+            app.songsNotListened.sort(key=lambda x: x[criterion], reverse=isSortReversed)
+            
         app.populateSongs()
 
     return callback()
