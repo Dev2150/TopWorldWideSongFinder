@@ -36,6 +36,7 @@ class App(ctk.CTk):
         self.widgetsSongs = []
         self.chartLengths = {}
         self.showListenedSongs = False
+        self.songsToPlay = 10  # Default number of songs to play
 
         # Ensure CSV files exist before loading data
         ensure_csv_files_exist()
@@ -56,12 +57,7 @@ class App(ctk.CTk):
                                  command=functools.partial(printStatistics, self))
         btnStats.grid(row=1, column=7)
 
-        btnPlayNext5 = ctk.CTkButton(master=self, text="Play next 5 songs", fg_color="#6b03fc",
-                                     command=functools.partial(openYoutubeLink, self, 0, 5))
-        btnPlayNext5.grid(row=2, column=4)
-
     def populateSongs(self):
-
         for widget in self.widgetsSongs:
             widget.destroy()
         self.widgetsSongs.clear()
@@ -162,6 +158,34 @@ class App(ctk.CTk):
         btnNext.grid(row=2, column=SONG_TABLE_OFFSET_COLUMN + 2)
         self.widgetsSongs.append(btnNext)
 
+        # Create a frame for the play controls
+        playControlFrame = ctk.CTkFrame(master=self, fg_color="transparent")
+        playControlFrame.grid(row=2, column=4, padx=5, pady=5)
+        self.widgetsSongs.append(playControlFrame)
+        
+        # Add dropdown for number of songs
+        songCountValues = ["5", "10", "15", "20"]
+        songCountDropdown = ctk.CTkComboBox(master=playControlFrame, values=songCountValues, width=60)
+        songCountDropdown.set(str(self.songsToPlay))
+        songCountDropdown.grid(row=0, column=0, padx=(0, 5))
+        self.widgetsSongs.append(songCountDropdown)
+        
+        # Update songs to play when dropdown changes
+        def update_songs_count(choice):
+            self.songsToPlay = int(choice)
+        
+        songCountDropdown.configure(command=update_songs_count)
+        
+        # Add play button
+        btnPlayNext = ctk.CTkButton(
+            master=playControlFrame, 
+            text="Play songs", 
+            fg_color="#6b03fc",
+            command=lambda: openYoutubeLink(self, 0)
+        )
+        btnPlayNext.grid(row=0, column=1)
+        self.widgetsSongs.append(btnPlayNext)
+
         btnSortByRank = ctk.CTkButton(master=self, text='Sort by rank', fg_color='maroon1',
                                       command=functools.partial(sortSongsBy, self, 'rank'))
         btnSortByRank.grid(row=0, column=1)
@@ -250,10 +274,11 @@ class App(ctk.CTk):
             self.populateSongs()
 
 
-def openYoutubeLink(app, pSongID, songsToPlay=1):
+def openYoutubeLink(app, pSongID, songsToPlay=None):
     def callback():
-
-        songList = list(range(pSongID, min(pSongID + songsToPlay, len(app.songsNotListened))))
+        # Use app's songsToPlay property if songsToPlay parameter is None
+        actual_songs_to_play = songsToPlay if songsToPlay is not None else app.songsToPlay
+        songList = list(range(pSongID, min(pSongID + actual_songs_to_play, len(app.songsNotListened))))
 
         ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
