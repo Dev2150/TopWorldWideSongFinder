@@ -6,7 +6,7 @@ import webbrowser
 import asyncio
 import customtkinter as ctk
 import requests
-from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink, ensure_csv_files_exist
+from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink, ensure_csv_files_exist, get_cached_image
 from globalVariables import fileSongsListened, fileSongsNotListened, headerFile, columnWidths, maxArtistLength, \
     maxSongLength, ICON_SIZE, PAGE_SIZE_SONG, headerGUI, NO_SONGS_LAST, fileChartCount, rankList, \
     MAX_SONG_COMPONENT_SIZE, SONG_TABLE_OFFSET_ROW, SONG_TABLE_OFFSET_COLUMN, CHART_TABLE_OFFSET_COLUMN, \
@@ -116,7 +116,7 @@ class App(ctk.CTk):
             lblSongName.grid(row=SONG_TABLE_OFFSET_ROW + renderID, column=SONG_TABLE_OFFSET_COLUMN + 1)
             self.widgetsSongs.append(lblSongName)
 
-            image = getImageFromChart(song['chart'])
+            image = get_cached_image(song['chart'])
 
             text = song['chart'] if image is None else ""
             lblChart = ctk.CTkLabel(master=frameArtist, text=text, justify=ctk.RIGHT, compound="right",
@@ -394,17 +394,9 @@ def sortSongsBy(app, criterion):
     return callback()
 
 
-def getImageFromChart(chart):
-    path = "resources/" + chart + ".png"
-    if os.path.exists(path):
-        imageRaw = Image.open(path)
-        image = ctk.CTkImage(imageRaw)
-        image._size = (ICON_SIZE, ICON_SIZE)
-        return image
-    match chart:
-        case _:
-            return None
-    return ctk.CTkImage(Image.open(path))
+# def getImageFromChart(chart):
+#     # Use the cached image function from auxiliary.py
+#     return get_cached_image(chart)
 
 
 def getLastSongsListenedTo(app):

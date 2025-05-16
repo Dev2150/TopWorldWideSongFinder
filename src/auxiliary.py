@@ -1,16 +1,31 @@
+"""
+Auxiliary functions for the TopWorldWideSongFinder application.
+
+This module contains various helper functions for the application, including:
+- URL and string manipulation
+- Data loading and saving
+- Web scraping
+- Image caching for flag images
+
+The image caching system uses Python's built-in @lru_cache decorator to store
+flag images in memory, reducing disk I/O and improving performance.
+"""
+
 import random
 import re
 import os
 from datetime import date
+from functools import lru_cache
 
 import requests
 from bs4 import BeautifulSoup
 import time
+from PIL import Image
+import customtkinter as ctk
 
 from globalVariables import fileNameChartLinks, fileSongsNotListened, fileSongsListened, urlSongCharts, \
     fileChartProperties, SCORE_NUMERATOR, SCORE_DENOMINATOR, SCORE_RATING_INERTIA, MIN_SLEEP_BETWEEN_CHARTS, \
-    MAX_SLEEP_BETWEEN_CHARTS, headerFile
-
+    MAX_SLEEP_BETWEEN_CHARTS, headerFile, ICON_SIZE
 
 def removeURLImpurities(link: str):
     link = re.sub(r'&', '', link)
@@ -154,3 +169,27 @@ def generateYoutubeLink(songName, artist):
     artistURL = re.sub(r' ', '+', artist)
     youtubeLink = 'https://music.youtube.com/search?q=' + artistURL + "+" + songNameURL
     return removeURLImpurities(youtubeLink)
+
+@lru_cache(maxsize=100)
+def get_cached_image(chart):
+    """
+    Get a cached image for the chart. If not in cache, load it from disk.
+    Uses Python's built-in lru_cache for efficient caching.
+    
+    Args:
+        chart (str): The chart name to get the flag for
+        
+    Returns:
+        CTkImage: The image object, or None if the image doesn't exist
+    """
+    path = "resources/" + chart + ".png"
+    if os.path.exists(path):
+        try:
+            imageRaw = Image.open(path)
+            image = ctk.CTkImage(imageRaw)
+            image._size = (ICON_SIZE, ICON_SIZE)
+            return image
+        except Exception as e:
+            print(f"Error loading image for {chart}: {e}")
+            return None
+    return None
