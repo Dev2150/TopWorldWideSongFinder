@@ -5,3 +5,6 @@ build/*
 __pycache__
 .idea
 logs
+client_secrets.json
+token.json
+src/config.json

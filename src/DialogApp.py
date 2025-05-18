@@ -6,8 +6,13 @@ import webbrowser
 import asyncio
 import threading
 import queue
+import json
 import customtkinter as ctk
 import requests
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from auxiliary import getChartLinksFromFile, getSongsNotListened, sleep, getChartProperties, generateYoutubeLink, ensure_csv_files_exist, get_cached_image
 from globalVariables import fileSongsListened, fileSongsNotListened, headerFile, columnWidths, maxArtistLength, \
     maxSongLength, ICON_SIZE, PAGE_SIZE_SONG, headerGUI, NO_SONGS_LAST, fileChartCount, rankList, \
@@ -20,17 +25,23 @@ from CTkToolTip import *
 from datetime import date
 from shazamio import Shazam
 from globalVariables import genresShazam, countryCodesShazam
+from google.auth.transport.requests import Request
 
 
 class App(ctk.CTk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("Top WorldWide Song Finder")
-        self.geometry("1400x900")
+        self.geometry("1200x700")
         for col, width in enumerate(columnWidths):
             self.grid_columnconfigure(col, minsize=width)
         ctk.set_appearance_mode("dark")
 
+        # YouTube API setup
+        self.youtube = None
+        self.playlist_id = self.load_playlist_id()
+        self.setup_youtube_api()
+        
         self.pageSongNotListened = 0
         self.pageSongListened = 0
         self.pageNoChart = 0
@@ -66,6 +77,75 @@ class App(ctk.CTk):
         btnStats = ctk.CTkButton(master=self, text="Print statistics", fg_color='red',
                                  command=functools.partial(printStatistics, self))
         btnStats.grid(row=1, column=7)
+
+    def setup_youtube_api(self):
+        """Setup YouTube API authentication"""
+        SCOPES = ['https://www.googleapis.com/auth/youtube']
+        creds = None
+        
+        # Check if we have stored credentials
+        if os.path.exists('token.json'):
+            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+            
+        # If no valid credentials available, let the user log in
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'client_secrets.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            
+            # Save the credentials for the next run
+            with open('token.json', 'w') as token:
+                token.write(creds.to_json())
+        
+        self.youtube = build('youtube', 'v3', credentials=creds)
+        
+    def add_to_playlist(self, video_id):
+        """Add a video to the specified playlist"""
+        if not self.youtube or not self.playlist_id:
+            return False
+            
+        try:
+            request = self.youtube.playlistItems().insert(
+                part="snippet",
+                body={
+                    "snippet": {
+                        "playlistId": self.playlist_id,
+                        "resourceId": {
+                            "kind": "youtube#video",
+                            "videoId": video_id
+                        }
+                    }
+                }
+            )
+            response = request.execute()
+            return True
+        except HttpError as e:
+            print(f"An HTTP error occurred: {e}")
+            return False
+            
+    def search_video(self, query):
+        """Search for a video and return its ID"""
+        if not self.youtube:
+            return None
+            
+        try:
+            request = self.youtube.search().list(
+                part="snippet",
+                q=query,
+                type="video",
+                maxResults=1
+            )
+            response = request.execute()
+            
+            if response['items']:
+                return response['items'][0]['id']['videoId']
+            return None
+        except HttpError as e:
+            print(f"An HTTP error occurred: {e}")
+            return None
 
     def populateSongs(self):
         for widget in self.widgetsSongs:
@@ -174,7 +254,7 @@ class App(ctk.CTk):
         self.widgetsSongs.append(playControlFrame)
         
         # Add dropdown for number of songs
-        songCountValues = ["5", "10", "15", "20"]
+        songCountValues = ['5', '10', '25', '50', '100']
         songCountDropdown = ctk.CTkComboBox(master=playControlFrame, values=songCountValues, width=60)
         songCountDropdown.set(str(self.songsToPlay))
         songCountDropdown.grid(row=0, column=0, padx=(0, 5))
@@ -189,7 +269,7 @@ class App(ctk.CTk):
         # Add play button
         btnPlayNext = ctk.CTkButton(
             master=playControlFrame, 
-            text="Play songs", 
+            text="Add to YT playlist", 
             fg_color="#6b03fc",
             command=lambda: openYoutubeLink(self, 0)
         )
@@ -252,7 +332,7 @@ class App(ctk.CTk):
         
         btnGenerate = ctk.CTkButton(
             master=btnFrame, 
-            text='Generate Songs', 
+            text='Fetch top songs', 
             fg_color='#6b03fc',
             font=("Arial", 14, "bold"),
             width=button_width,
@@ -417,6 +497,18 @@ class App(ctk.CTk):
         self.update_progress_message("Stopping and saving data...")
         self.update()
 
+    def load_playlist_id(self):
+        """Load playlist ID from config file"""
+        config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    return config.get('youtube_playlist_id', '')
+            return ''
+        except Exception as e:
+            print(f"Error loading config: {e}")
+            return ''
 
 def openYoutubeLink(app, pSongID, songsToPlay=None):
     def callback():
@@ -427,7 +519,14 @@ def openYoutubeLink(app, pSongID, songsToPlay=None):
         ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
             for songID in songList:
-                webbrowser.open(app.songsNotListened[songID]['urlYoutube'])
+                song = app.songsNotListened[songID]
+                # Search for the video and add to playlist
+                video_id = app.search_video(f"{song['artist']} - {song['songName']}")
+                if video_id and app.playlist_id:
+                    if app.add_to_playlist(video_id):
+                        print(f"Added {song['artist']} - {song['songName']} to playlist")
+                    else:
+                        print(f"Failed to add {song['artist']} - {song['songName']} to playlist")
 
             id = -1
             fileNotListened.write(headerFile + "\n")
@@ -436,7 +535,6 @@ def openYoutubeLink(app, pSongID, songsToPlay=None):
                 listened = id in songList
 
                 if not listened:
-                    # song['urlYoutube'] = removeURLImpurities(song['urlYoutube'])
                     songString = song['artist'] + ";" + song['songName'] + ";" + str(
                         song['rank']) + ";" + song['chart'] + ";" + song['date'] + ";" + song[
                                      'urlYoutube'] + "\n"
