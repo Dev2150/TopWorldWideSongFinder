@@ -5,7 +5,6 @@ import re
 import webbrowser
 import asyncio
 import threading
-import queue
 import json
 import customtkinter as ctk
 import requests
@@ -20,7 +19,6 @@ from globalVariables import fileSongsListened, fileSongsNotListened, headerFile,
     CHART_TABLE_OFFSET_ROW, column_widths2, TOOLTIP_ALPHA, IS_AFFECTED_BY_RATING, SCORE_RATING_INERTIA, \
     SCORE_DENOMINATOR, PRINT_CHART_STATISTICS, URL_LAST_FM_CHARTS, LAST_FM_SONG_TR_CLASS, VERBOSE
 from bs4 import BeautifulSoup
-from PIL import Image
 from CTkToolTip import *
 from datetime import date
 from shazamio import Shazam

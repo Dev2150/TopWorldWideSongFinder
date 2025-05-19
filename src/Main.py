@@ -1,5 +1,4 @@
 from DialogApp import App
-import sys
 import os
 import logging
 import warnings

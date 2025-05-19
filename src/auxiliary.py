@@ -14,7 +14,6 @@ flag images in memory, reducing disk I/O and improving performance.
 import random
 import re
 import os
-from datetime import date
 from functools import lru_cache
 
 import requests
