@@ -533,6 +533,9 @@ def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
 
         ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
+            # Keep track of successfully processed songs
+            successfully_processed = set()
+            
             for songID in songList:
                 song = app.songsNotListened[songID]
                 print(f"\nProcessing song: {song['artist']} - {song['songName']}")
@@ -541,6 +544,7 @@ def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
                     # Open in browser
                     webbrowser.open(song['urlYoutube'])
                     print(f"Opened {song['artist']} - {song['songName']} in browser")
+                    successfully_processed.add(songID)
                 else:
                     # Add to playlist
                     video_id = app.search_video(f"{song['artist']} - {song['songName']}")
@@ -548,6 +552,7 @@ def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
                     if video_id and app.playlist_id:
                         if app.add_to_playlist(video_id):
                             print(f"Added {song['artist']} - {song['songName']} to playlist")
+                            successfully_processed.add(songID)
                         else:
                             print(f"Failed to add {song['artist']} - {song['songName']} to playlist")
                     else:
@@ -557,7 +562,7 @@ def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
             fileNotListened.write(headerFile + "\n")
             for song in app.songsNotListened:
                 id += 1
-                listened = id in songList
+                listened = id in successfully_processed
 
                 if not listened:
                     songString = song['artist'] + ";" + song['songName'] + ";" + str(
