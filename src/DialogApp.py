@@ -32,7 +32,7 @@ class App(ctk.CTk):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.title("Top WorldWide Song Finder")
-        self.geometry("1200x700")
+        self.geometry("1400x700")
         for col, width in enumerate(columnWidths):
             self.grid_columnconfigure(col, minsize=width)
         ctk.set_appearance_mode("dark")
@@ -271,10 +271,20 @@ class App(ctk.CTk):
             master=playControlFrame, 
             text="Add to YT playlist", 
             fg_color="#6b03fc",
-            command=lambda: openYoutubeLink(self, 0)
+            command=lambda: openYoutubeLink(self, 0, open_in_browser=False)
         )
         btnPlayNext.grid(row=0, column=1)
         self.widgetsSongs.append(btnPlayNext)
+
+        # Add browser open button
+        btnOpenInBrowser = ctk.CTkButton(
+            master=playControlFrame, 
+            text="Open in browser", 
+            fg_color="#03fc6b",
+            command=lambda: openYoutubeLink(self, 0, open_in_browser=True)
+        )
+        btnOpenInBrowser.grid(row=0, column=2)
+        self.widgetsSongs.append(btnOpenInBrowser)
 
         btnSortByRank = ctk.CTkButton(master=self, text='Sort by rank', fg_color='maroon1',
                                       command=functools.partial(sortSongsBy, self, 'rank'))
@@ -510,23 +520,40 @@ class App(ctk.CTk):
             print(f"Error loading config: {e}")
             return ''
 
-def openYoutubeLink(app, pSongID, songsToPlay=None):
+def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
     def callback():
+        print("Starting YouTube process...")
         # Use app's songsToPlay property if songsToPlay parameter is None
         actual_songs_to_play = songsToPlay if songsToPlay is not None else app.songsToPlay
         songList = list(range(pSongID, min(pSongID + actual_songs_to_play, len(app.songsNotListened))))
+        
+        print(f"Number of songs to process: {len(songList)}")
+        
+        if not open_in_browser:
+            print(f"YouTube API initialized: {app.youtube is not None}")
+            print(f"Playlist ID: {app.playlist_id}")
 
         ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
             for songID in songList:
                 song = app.songsNotListened[songID]
-                # Search for the video and add to playlist
-                video_id = app.search_video(f"{song['artist']} - {song['songName']}")
-                if video_id and app.playlist_id:
-                    if app.add_to_playlist(video_id):
-                        print(f"Added {song['artist']} - {song['songName']} to playlist")
+                print(f"\nProcessing song: {song['artist']} - {song['songName']}")
+                
+                if open_in_browser:
+                    # Open in browser
+                    webbrowser.open(song['urlYoutube'])
+                    print(f"Opened {song['artist']} - {song['songName']} in browser")
+                else:
+                    # Add to playlist
+                    video_id = app.search_video(f"{song['artist']} - {song['songName']}")
+                    print(f"Video ID found: {video_id}")
+                    if video_id and app.playlist_id:
+                        if app.add_to_playlist(video_id):
+                            print(f"Added {song['artist']} - {song['songName']} to playlist")
+                        else:
+                            print(f"Failed to add {song['artist']} - {song['songName']} to playlist")
                     else:
-                        print(f"Failed to add {song['artist']} - {song['songName']} to playlist")
+                        print(f"Could not add song - Video ID: {video_id}, Playlist ID: {app.playlist_id}")
 
             id = -1
             fileNotListened.write(headerFile + "\n")
