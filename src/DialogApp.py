@@ -8,6 +8,7 @@ import threading
 import json
 import customtkinter as ctk
 import requests
+import logging
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -20,7 +21,7 @@ from globalVariables import fileSongsListened, fileSongsNotListened, headerFile,
     SCORE_DENOMINATOR, PRINT_CHART_STATISTICS, URL_LAST_FM_CHARTS, LAST_FM_SONG_TR_CLASS, VERBOSE
 from bs4 import BeautifulSoup
 from CTkToolTip import *
-from datetime import date
+from datetime import date, datetime
 from shazamio import Shazam
 from globalVariables import genresShazam, countryCodesShazam
 from google.auth.transport.requests import Request
@@ -350,6 +351,31 @@ class App(ctk.CTk):
         btnGenerate.pack(padx=10, pady=5)
         self.widgetsChart.append(btnGenerate)
 
+        # Add console output text area
+        console_frame = ctk.CTkFrame(master=self, fg_color="transparent")
+        console_frame.grid(row=rowOffset + 3, column=columnOffset, columnspan=3, rowspan=11, padx=5, pady=5, sticky="nsew")
+        self.widgetsChart.append(console_frame)
+
+        # Configure the frame to expand
+        console_frame.grid_rowconfigure(0, weight=1)
+        console_frame.grid_columnconfigure(0, weight=1)
+
+        self.console_output = ctk.CTkTextbox(
+            master=console_frame,
+            width=button_width + 20,
+            height=500,
+            font=("Consolas", 12),
+            fg_color="#1a1a1a",
+            text_color="#ffffff"
+        )
+        self.console_output.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
+        self.widgetsChart.append(self.console_output)
+
+        # Configure grid weights to allow console to expand
+        self.grid_rowconfigure(rowOffset + 3, weight=1)
+        self.grid_columnconfigure(columnOffset, weight=1)
+        self.grid_columnconfigure(columnOffset + 1, weight=1)
+
     def show_progress_indicator(self, message="Loading..."):
         # If there's already a progress indicator, destroy it first
         if self.progressFrame is not None:
@@ -396,6 +422,21 @@ class App(ctk.CTk):
         if self.progressLabel is not None:
             self.progressLabel.configure(text=message)
             self.update()
+        # Also update console output
+        self.update_console(message)
+
+    def update_console(self, message):
+        """Add a message to the console output with timestamp"""
+        if hasattr(self, 'console_output'):
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            formatted_message = f"[{timestamp}] {message}"
+            self.console_output.insert("end", formatted_message + "\n")
+            self.console_output.see("end")  # Scroll to bottom
+            self.update()
+            
+            # Also log to file
+            logger = logging.getLogger('TopWorldWideSongFinder')
+            logger.info(message)
     
     def refresh_song_data(self):
         """Reload all song data and refresh the UI"""
@@ -520,16 +561,16 @@ class App(ctk.CTk):
 
 def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
     def callback():
-        print("Starting YouTube process...")
+        app.update_console("Starting YouTube process...")
         # Use app's songsToPlay property if songsToPlay parameter is None
         actual_songs_to_play = songsToPlay if songsToPlay is not None else app.songsToPlay
         songList = list(range(pSongID, min(pSongID + actual_songs_to_play, len(app.songsNotListened))))
         
-        print(f"Number of songs to process: {len(songList)}")
+        app.update_console(f"Number of songs to process: {len(songList)}")
         
         if not open_in_browser:
-            print(f"YouTube API initialized: {app.youtube is not None}")
-            print(f"Playlist ID: {app.playlist_id}")
+            app.update_console(f"YouTube API initialized: {app.youtube is not None}")
+            app.update_console(f"Playlist ID: {app.playlist_id}")
 
         ensure_csv_files_exist()
         with open(fileSongsListened, 'a') as fileListened, open(fileSongsNotListened, 'w') as fileNotListened:
@@ -538,25 +579,25 @@ def openYoutubeLink(app, pSongID, songsToPlay=None, open_in_browser=False):
             
             for songID in songList:
                 song = app.songsNotListened[songID]
-                print(f"\nProcessing song: {song['artist']} - {song['songName']}")
+                app.update_console(f"\nProcessing song: {song['artist']} - {song['songName']}")
                 
                 if open_in_browser:
                     # Open in browser
                     webbrowser.open(song['urlYoutube'])
-                    print(f"Opened {song['artist']} - {song['songName']} in browser")
+                    app.update_console(f"Opened {song['artist']} - {song['songName']} in browser")
                     successfully_processed.add(songID)
                 else:
                     # Add to playlist
                     video_id = app.search_video(f"{song['artist']} - {song['songName']}")
-                    print(f"Video ID found: {video_id}")
+                    app.update_console(f"Video ID found: {video_id}")
                     if video_id and app.playlist_id:
                         if app.add_to_playlist(video_id):
-                            print(f"Added {song['artist']} - {song['songName']} to playlist")
+                            app.update_console(f"Added {song['artist']} - {song['songName']} to playlist")
                             successfully_processed.add(songID)
                         else:
-                            print(f"Failed to add {song['artist']} - {song['songName']} to playlist")
+                            app.update_console(f"Failed to add {song['artist']} - {song['songName']} to playlist")
                     else:
-                        print(f"Could not add song - Video ID: {video_id}, Playlist ID: {app.playlist_id}")
+                        app.update_console(f"Could not add song - Video ID: {video_id}, Playlist ID: {app.playlist_id}")
 
             id = -1
             fileNotListened.write(headerFile + "\n")
@@ -685,9 +726,9 @@ def getSongsFromBillboard(self, chart, pMaxRank):
 
             updateSongDatabase(self, rank, chart, maxRank, stringToAddToNotListened, songsFound)
         except AttributeError as e:
-            print(f"Attribute Error: {e}")
+            self.update_console(f"Attribute Error: {e}")
         except Exception as e:
-            print(f"{e}")
+            self.update_console(f"{e}")
 
     callback()
 
@@ -795,10 +836,10 @@ def findDuplicates(app):
         if not isDuplicate:
             seen.append(songToCheck)
     if len(duplicates) == 0:
-        print("No duplicates")
+        app.update_console("No duplicates")
     else:
         for song in duplicates:
-            print(f"{song['artist']} - {song['songName']}")
+            app.update_console(f"{song['artist']} - {song['songName']}")
 
 
 def getMaxPage(app):
@@ -908,17 +949,17 @@ def printStatistics(app):
         for date, count in dates.items():
             f.write(f"{date},{count}\n")
     
-    print(f"Statistics written to {stats_file}")
+    app.update_console(f"Statistics written to {stats_file}")
 
 
 def updateSongDatabase(self, rank, chart, maxRank, stringToAddToNotListened, songsFound):
     if rank == 0:
-        print(f"No songs found in the chart {chart}")
+        self.update_console(f"No songs found in the chart {chart}")
     else:
         if VERBOSE:
-            print(f"Found {str(songsFound): <2} new songs from the {str(maxRank): <2} songs from {chart}")
+            self.update_console(f"Found {str(songsFound): <2} new songs from the {str(maxRank): <2} songs from {chart}")
         else:
-            print(f"Found {str(songsFound): <2}/{str(maxRank): <2} songs from {chart}")
+            self.update_console(f"Found {str(songsFound): <2}/{str(maxRank): <2} songs from {chart}")
         if PRINT_CHART_STATISTICS:
             with open(fileChartCount, 'a') as f:
                 f.write(chart + ";" + str(rank) + ";\n")
